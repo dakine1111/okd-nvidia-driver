@@ -103,13 +103,13 @@ data:
     #!/bin/bash
     set -ex
 
-    dnf install -y jq dnf-plugins-core rpm-build git dnf-plugin-versionlock binutils-2.41-58.el10 binutils-gold-2.41-58.el10 binutils-devel-2.41-58.el10 https://rpmfind.net/linux/centos-stream/10-stream/AppStream/x86_64/os/Packages/gcc-14.3.1-2.1.el10.x86_64.rpm gcc-c++-14.3.1-2.1.el10;
-    dnf versionlock add gcc-14.3.1-2.1.el10
-    dnf versionlock add cpp-14.3.1-2.1.el10
+    dnf install -y jq dnf-plugins-core rpm-build git dnf-plugin-versionlock binutils-2.41-58.el10 binutils-gold-2.41-58.el10 binutils-devel-2.41-58.el10 https://rpmfind.net/linux/centos-stream/10-stream/AppStream/x86_64/os/Packages/gcc-14.3.1-2.el10.x86_64.rpm gcc-c++-14.3.1-2.el10;
+    dnf versionlock add gcc-14.3.1-2.el10
+    dnf versionlock add cpp-14.3.1-2.el10
     dnf versionlock add binutils-2.41-58.el10
     dnf versionlock add binutils-devel-2.41-58.el10
     dnf versionlock add binutils-gold-2.41-58.el10
-    dnf versionlock add gcc-c++-14.3.1-2.1.el10
+    dnf versionlock add gcc-c++-14.3.1-2.el10
     dnf config-manager --set-enabled crb;
     mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS};
     cd ~/rpmbuild/SOURCES;
@@ -187,7 +187,6 @@ spec:
       from:
         kind: DockerImage
         name: 'image-registry.openshift-image-registry.svc:5000/gpu-operator/kernel:latest'
-        # name: 'quay.io/centos/centos:stream10'
       buildArgs:
         - name: "KERNEL_VERSION_NOARCH" # Get it with `uname -r | sed "s/\.$(uname -p)//"`
           value: "6.12.0-153.el10.x86_64"
@@ -291,6 +290,12 @@ spec:
       RUN NVIDIA_GPGKEY_SUM=afbea87d3b979b3788ef34223aeeb323ade481128e2c133723ae99b8a51368bb && \
         curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/rhel10/${NVARCH}/CDF6BA43.pub | sed '/^Version/d' > /etc/pki/rpm-gpg/RPM-GPG-KEY-NVIDIA && \
         echo "$NVIDIA_GPGKEY_SUM  /etc/pki/rpm-gpg/RPM-GPG-KEY-NVIDIA" | sha256sum -c --strict -
+
+      ARG PAHOLE_FLAGS="--skip_encoding_btf_enum64"
+      ARG IGNORE_BTF_ERRORS=1
+
+      ENV PAHOLE_FLAGS=${PAHOLE_FLAGS}
+      ENV IGNORE_BTF_ERRORS=${IGNORE_BTF_ERRORS}
 
       # Install NVIDIA driver with DKMS to build modules
       RUN dnf install -y \
