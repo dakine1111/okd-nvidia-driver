@@ -1,3 +1,13 @@
+---
+kind: ImageStream
+apiVersion: image.openshift.io/v1
+metadata:
+  name: kernel
+  namespace: gpu-operator
+spec:
+  lookupPolicy:
+    local: true
+---
 kind: ImageStream
 apiVersion: image.openshift.io/v1
 metadata:
@@ -82,6 +92,81 @@ data:
 
     echo "[✓] Dummy EGL package installed successfully."
     dnf clean all
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: kernel
+  namespace: gpu-operator
+data:
+  kernel.sh: |
+    #!/bin/bash
+    set -ex
+
+    dnf install -y jq dnf-plugins-core rpm-build git dnf-plugin-versionlock binutils-2.41-58.el10 binutils-gold-2.41-58.el10 binutils-devel-2.41-58.el10 https://rpmfind.net/linux/centos-stream/10-stream/AppStream/x86_64/os/Packages/gcc-14.3.1-2.1.el10.x86_64.rpm gcc-c++-14.3.1-2.1.el10;
+    dnf versionlock add gcc-14.3.1-2.1.el10
+    dnf versionlock add cpp-14.3.1-2.1.el10
+    dnf versionlock add binutils-2.41-58.el10
+    dnf versionlock add binutils-devel-2.41-58.el10
+    dnf versionlock add binutils-gold-2.41-58.el10
+    dnf versionlock add gcc-c++-14.3.1-2.1.el10
+    dnf config-manager --set-enabled crb;
+    mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS};
+    cd ~/rpmbuild/SOURCES;
+    export KVer="6.12.0-153.el10.x86_64";
+    kernel_source_commit=$(curl -L 'https://gitlab.com/api/v4/projects/56169485/repository/tags?search='${KVer%.x86_64} 2>/dev/null | jq --raw-output -e '.[] | .target');
+    curl -L http://gitlab.com/api/v4/projects/56169485/repository/archive.tar.gz?sha=${kernel_source_commit} 2>/dev/null | tar xzf -; mv centos* linux-${KVer%.x86_64}; tar -cf - linux-${KVer%.x86_64}/ | xz -0 -T0 - > linux-${KVer%.x86_64}.tar.xz;
+    for p in {1..5}; do
+      rpm_source_commit=$(curl -L 'https://gitlab.com/api/v4/projects/23664863/repository/commits?ref_name=c10s&path%2Fkernel%2Fkernel.spec&per_page=100&page='${p} 2>/dev/null | jq --raw-output -e '.[] | select(.title=="kernel-'${KVer%.x86_64}'") | .id') ;
+      if [ $? -eq 0 ]; then
+        unset KVer;
+        git init .;
+        git remote add origin https://gitlab.com/redhat/centos-stream/rpms/kernel.git;
+        git fetch origin ${rpm_source_commit};
+        git checkout ${rpm_source_commit};
+        mv kernel.spec ../SPECS/;
+        unset rpm_source_commit;
+        unset kernel_source_commit;
+        break;
+      fi;
+    done;
+    cd ~/rpmbuild/ ;
+    dnf builddep -y SPECS/kernel.spec;
+    rpmbuild -bb --with baseonly --with drm --without pae --without debug --without zfcpdump --without arm64_64k --without realtime  --without realtime_arm64_64k --without cross_headers --without perf --without tools --without debuginfo --with kernel_abi_stablelists --without selftests --clean --target x86_64 SPECS/kernel.spec;
+    rm -rf ~/rpmbuild/BUILD;
+    rm -rf ~/rpmbuild/BUILDROOT;
+    rm -rf ~/rpmbuild/SOURCES;
+    dnf clean all;
+---
+kind: BuildConfig
+apiVersion: build.openshift.io/v1
+metadata:
+  name: kernel
+  namespace: gpu-operator
+spec:
+  nodeSelector: null
+  output:
+    to:
+      kind: ImageStreamTag
+      name: 'kernel:latest'
+  resources: {}
+  successfulBuildsHistoryLimit: 1
+  failedBuildsHistoryLimit: 1
+  strategy:
+    type: Docker
+  postCommit: {}
+  source:
+    type: Dockerfile
+    dockerfile: |-
+      FROM quay.io/centos/centos:stream10
+      ADD kernel.sh /kernel.sh
+      RUN chmod +x /kernel.sh; /kernel.sh
+    configMaps:
+      - configMap:
+          name: kernel
+  runPolicy: Serial
+  triggers:
+    - type: ConfigChange
 ---
 kind: BuildConfig
 apiVersion: build.openshift.io/v1
