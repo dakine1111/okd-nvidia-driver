@@ -2,17 +2,8 @@
 kind: ImageStream
 apiVersion: image.openshift.io/v1
 metadata:
-  name: kernel
-  namespace: gpu-operator
-spec:
-  lookupPolicy:
-    local: true
----
-kind: ImageStream
-apiVersion: image.openshift.io/v1
-metadata:
   name: driver
-  namespace: gpu-operator
+  namespace: gpu-operator-dev
 spec:
   lookupPolicy:
     local: false
@@ -21,7 +12,7 @@ kind: ImageStream
 apiVersion: image.openshift.io/v1
 metadata:
   name: driver-toolkit-centos10
-  namespace: gpu-operator
+  namespace: gpu-operator-dev
 spec:
   lookupPolicy:
     local: false
@@ -30,7 +21,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: cuda-repo
-  namespace: gpu-operator
+  namespace: gpu-operator-dev
 data:
   cuda.repo-x86_64: |
     [cuda]
@@ -46,7 +37,7 @@ kind: ConfigMap
 apiVersion: v1
 metadata:
   name: dummy-egl
-  namespace: gpu-operator
+  namespace: gpu-operator-dev
 immutable: false
 data:
   dummy-egl.sh: |-
@@ -93,86 +84,11 @@ data:
     echo "[✓] Dummy EGL package installed successfully."
     dnf clean all
 ---
-kind: ConfigMap
-apiVersion: v1
-metadata:
-  name: kernel
-  namespace: gpu-operator
-data:
-  kernel.sh: |
-    #!/bin/bash
-    set -ex
-
-    dnf install -y jq dnf-plugins-core rpm-build git dnf-plugin-versionlock binutils-2.41-58.el10 binutils-gold-2.41-58.el10 binutils-devel-2.41-58.el10 https://rpmfind.net/linux/centos-stream/10-stream/AppStream/x86_64/os/Packages/gcc-14.3.1-2.el10.x86_64.rpm gcc-c++-14.3.1-2.el10;
-    dnf versionlock add gcc-14.3.1-2.el10
-    dnf versionlock add cpp-14.3.1-2.el10
-    dnf versionlock add binutils-2.41-58.el10
-    dnf versionlock add binutils-devel-2.41-58.el10
-    dnf versionlock add binutils-gold-2.41-58.el10
-    dnf versionlock add gcc-c++-14.3.1-2.el10
-    dnf config-manager --set-enabled crb;
-    mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS};
-    cd ~/rpmbuild/SOURCES;
-    export KVer="6.12.0-153.el10.x86_64";
-    kernel_source_commit=$(curl -L 'https://gitlab.com/api/v4/projects/56169485/repository/tags?search='${KVer%.x86_64} 2>/dev/null | jq --raw-output -e '.[] | .target');
-    curl -L http://gitlab.com/api/v4/projects/56169485/repository/archive.tar.gz?sha=${kernel_source_commit} 2>/dev/null | tar xzf -; mv centos* linux-${KVer%.x86_64}; tar -cf - linux-${KVer%.x86_64}/ | xz -0 -T0 - > linux-${KVer%.x86_64}.tar.xz;
-    for p in {1..5}; do
-      rpm_source_commit=$(curl -L 'https://gitlab.com/api/v4/projects/23664863/repository/commits?ref_name=c10s&path%2Fkernel%2Fkernel.spec&per_page=100&page='${p} 2>/dev/null | jq --raw-output -e '.[] | select(.title=="kernel-'${KVer%.x86_64}'") | .id') ;
-      if [ $? -eq 0 ]; then
-        unset KVer;
-        git init .;
-        git remote add origin https://gitlab.com/redhat/centos-stream/rpms/kernel.git;
-        git fetch origin ${rpm_source_commit};
-        git checkout ${rpm_source_commit};
-        mv kernel.spec ../SPECS/;
-        unset rpm_source_commit;
-        unset kernel_source_commit;
-        break;
-      fi;
-    done;
-    cd ~/rpmbuild/ ;
-    dnf builddep -y SPECS/kernel.spec;
-    rpmbuild -bb --with baseonly --with drm --without pae --without debug --without zfcpdump --without arm64_64k --without realtime  --without realtime_arm64_64k --without cross_headers --without perf --without tools --without debuginfo --with kernel_abi_stablelists --without selftests --clean --target x86_64 SPECS/kernel.spec;
-    rm -rf ~/rpmbuild/BUILD;
-    rm -rf ~/rpmbuild/BUILDROOT;
-    rm -rf ~/rpmbuild/SOURCES;
-    dnf clean all;
----
 kind: BuildConfig
 apiVersion: build.openshift.io/v1
 metadata:
-  name: kernel
-  namespace: gpu-operator
-spec:
-  nodeSelector: null
-  output:
-    to:
-      kind: ImageStreamTag
-      name: 'kernel:latest'
-  resources: {}
-  successfulBuildsHistoryLimit: 1
-  failedBuildsHistoryLimit: 1
-  strategy:
-    type: Docker
-  postCommit: {}
-  source:
-    type: Dockerfile
-    dockerfile: |-
-      FROM quay.io/centos/centos:stream10
-      ADD kernel.sh /kernel.sh
-      RUN chmod +x /kernel.sh; /kernel.sh
-    configMaps:
-      - configMap:
-          name: kernel
-  runPolicy: Serial
-  triggers:
-    - type: ConfigChange
----
-kind: BuildConfig
-apiVersion: build.openshift.io/v1
-metadata:
-  name: driver-toolkit-centos10
-  namespace: gpu-operator
+  name: 1-driver-toolkit-centos10
+  namespace: gpu-operator-dev
 spec:
   output:
     to:
@@ -186,29 +102,27 @@ spec:
     dockerStrategy:
       from:
         kind: DockerImage
-        name: 'image-registry.openshift-image-registry.svc:5000/gpu-operator/kernel:latest'
+        name: 'quay.io/centos/centos:stream10'
       buildArgs:
         - name: "KERNEL_VERSION_NOARCH" # Get it with `uname -r | sed "s/\.$(uname -p)//"`
-          value: "6.12.0-153.el10.x86_64"
+          value: "6.12.0-180.el10"
         - name: "GCC_VERSION" # Extract from `cat /proc/version` and verify with dnf list gcc --showduplicates to get the exact right value
-          value: "14.3.1-2.3.el10"
+          value: "14.3.1-4.2.el10"
   source:
     type: Dockerfile
     dockerfile: |
-      FROM image-registry.openshift-image-registry.svc:5000/gpu-operator/kernel:latest as kernel
-
-      FROM quay.io/centos/centos:stream10 as builder
+      FROM quay.io/centos/centos:stream10
 
       ARG KERNEL_VERSION_NOARCH=''
       ARG GCC_VERSION=''
 
-      COPY --from=kernel /root/rpmbuild/RPMS/x86_64/kernel-headers-${KERNEL_VERSION_NOARCH}.rpm /root/rpmbuild/RPMS/x86_64/kernel-devel-${KERNEL_VERSION_NOARCH}.rpm /root/rpmbuild/RPMS/x86_64/kernel-devel-matched-${KERNEL_VERSION_NOARCH}.rpm /root/rpmbuild/RPMS/x86_64/kernel-core-${KERNEL_VERSION_NOARCH}.rpm /root/rpmbuild/RPMS/x86_64/kernel-modules-core-${KERNEL_VERSION_NOARCH}.rpm /tmp/
       # Enable CRB repository
       RUN dnf config-manager --set-enabled crb \
         && dnf install -y epel-release \
         && dnf config-manager --set-enabled epel \
-        # Install build toolchain
-        && dnf install -y --setopt=install_weak_deps=false \
+        # Download packes
+        && dnf download -y --setopt=install_weak_deps=false \
+          gcc-${GCC_VERSION} \
           git \
           jq \
           make \
@@ -218,10 +132,25 @@ spec:
           xz \
           elfutils-libelf-devel \
           kmod \
-          /tmp/kernel-*.x86_64.rpm \
-          https://rpmfind.net/linux/centos-stream/10-stream/AppStream/x86_64/os/Packages/gcc-${GCC_VERSION}.x86_64.rpm \
-          https://rpmfind.net/linux/centos-stream/10-stream/AppStream/x86_64/os/Packages/gcc-c++-${GCC_VERSION}.x86_64.rpm \
-          https://rpmfind.net/linux/centos-stream/10-stream/AppStream/x86_64/os/Packages/cpp-${GCC_VERSION}.x86_64.rpm \
+          kernel-${KERNEL_VERSION_NOARCH} \
+          kernel-headers-${KERNEL_VERSION_NOARCH} \
+          kernel-devel-${KERNEL_VERSION_NOARCH}  \
+          kernel-devel-matched-${KERNEL_VERSION_NOARCH}  \
+        # Install build toolchain
+        && dnf install -y --setopt=install_weak_deps=false \
+          gcc-${GCC_VERSION} \
+          git \
+          jq \
+          make \
+          dkms \
+          openssl \
+          tar \
+          xz \
+          elfutils-libelf-devel \
+          kmod \
+          kernel-headers-${KERNEL_VERSION_NOARCH} \
+          kernel-devel-${KERNEL_VERSION_NOARCH}  \
+          kernel-devel-matched-${KERNEL_VERSION_NOARCH}  \
         && dnf clean all
   triggers:
     - type: ConfigChange
@@ -230,14 +159,14 @@ spec:
 kind: BuildConfig
 apiVersion: build.openshift.io/v1
 metadata:
-  name: driver-pb
-  namespace: gpu-operator
+  name: 2-driver-pb
+  namespace: gpu-operator-dev
 spec:
   nodeSelector: null
   output:
     to:
       kind: ImageStreamTag
-      name: 'driver:580-6.12.0-153.el10.x86_64-centos10'
+      name: 'driver:580-6.12.0-180.el10.x86_64-centos10'
   resources: {}
   successfulBuildsHistoryLimit: 2
   failedBuildsHistoryLimit: 2
@@ -246,13 +175,13 @@ spec:
     dockerStrategy:
       buildArgs:
         - name: DRIVER_TOOLKIT_IMAGE
-          value: 'image-registry.openshift-image-registry.svc:5000/gpu-operator/driver-toolkit-centos10:latest'
+          value: 'image-registry.openshift-image-registry.svc:5000/gpu-operator-dev/driver-toolkit-centos10:latest'
         - name: "CUDA_DIST"
           value: "centos10"
         - name: "KERNEL_VERSION"
-          value: "6.12.0-153.el10.x86_64"
+          value: "6.12.0-180.el10.x86_64"
         - name: "KERNEL_VERSION_NOARCH"
-          value: "6.12.0-153.el10"
+          value: "6.12.0-180.el10"
         - name: "RHEL_VERSION_MAJOR"
           value: '10'
         - name: "BUILD_ARCH"
@@ -268,7 +197,7 @@ spec:
         - name: "BUILDER_USER"
           value: "Dirk Egert"
         - name: "BUILDER_EMAIL"
-          value: "d.egert@degert-it.de"
+          value: "github@degert-it.de"
         - name: "CUDA_VERSION"
           value: "13.0.2"
   postCommit: {}
@@ -291,19 +220,23 @@ spec:
         curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/rhel10/${NVARCH}/CDF6BA43.pub | sed '/^Version/d' > /etc/pki/rpm-gpg/RPM-GPG-KEY-NVIDIA && \
         echo "$NVIDIA_GPGKEY_SUM  /etc/pki/rpm-gpg/RPM-GPG-KEY-NVIDIA" | sha256sum -c --strict -
 
-      ARG PAHOLE_FLAGS="--skip_encoding_btf_enum64"
-      ARG IGNORE_BTF_ERRORS=1
-
-      ENV PAHOLE_FLAGS=${PAHOLE_FLAGS}
-      ENV IGNORE_BTF_ERRORS=${IGNORE_BTF_ERRORS}
-
       # Install NVIDIA driver with DKMS to build modules
       RUN dnf install -y \
           nvidia-driver-cuda-${DRIVER_VERSION} \
           kmod-nvidia-open-dkms-${DRIVER_VERSION} \
           && dnf clean all
 
-      # DKMS will automatically build the modules for the installed kernel
+      RUN echo "=== Force DKMS install (should preserve modules) ===" && \
+          # Disable MOK Signature
+          echo '#!/bin/bash' > /tmp/disable-mok.sh && \
+          echo 'exit 0' >> /tmp/disable-mok.sh && \
+          chmod +x /tmp/disable-mok.sh && \
+          # DKMS with custom script
+          DKMS_SIGN_TOOL="/tmp/disable-mok.sh" dkms build nvidia/${DRIVER_VERSION} -k ${KERNEL_VERSION} && \
+          # Force install
+          dkms install nvidia/${DRIVER_VERSION} -k ${KERNEL_VERSION} --force && \
+          depmod ${KERNEL_VERSION}
+
       # Modules will be in /lib/modules/${KERNEL_VERSION}/extra/
       RUN ls -la /lib/modules/${KERNEL_VERSION}/extra/ && \
           modinfo /lib/modules/${KERNEL_VERSION}/extra/nvidia.ko.xz
@@ -346,9 +279,9 @@ spec:
       # [root@nvidia-driver-daemonset-6 extra]# ls
       # drivers  nvidia-drm.ko.xz  nvidia-modeset.ko.xz  nvidia-peermem.ko.xz  nvidia-uvm.ko.xz  nvidia.ko.xz
       # [root@nvidia-driver-daemonset-6 extra]# pwd
-      # /usr/lib/modules/6.12.0-153.el10.x86_64/extra
+      # /usr/lib/modules/6.12.0-180.el10.x86_64/extra
       COPY --from=builder /lib/modules/${KERNEL_VERSION}/extra/ /lib/modules/${KERNEL_VERSION}/extra/
-      RUN depmod
+      RUN depmod ${KERNEL_VERSION}
 
       # Copy firmware files, they should al
       # COPY --from=builder /usr/lib/firmware/nvidia/${DRIVER_VERSION}/ /opt/lib/firmware/nvidia/${DRIVER_VERSION}/
@@ -359,7 +292,7 @@ spec:
 
       # Copy OCP DTK entrypoint
       RUN curl -Lo /usr/local/bin/ocp_dtk_entrypoint \
-          https://raw.githubusercontent.com/jggc/gpu-driver-container/refs/heads/main/rhel10/ocp_dtk_entrypoint && \
+          https://raw.githubusercontent.com/dakine1111/okd-nvidia-driver/refs/heads/okd-4.22/rhel10/precompiled/ocp_dtk_entrypoint && \
           chmod +x /usr/local/bin/ocp_dtk_entrypoint
 
       # Labels
@@ -382,9 +315,6 @@ spec:
       - configMap:
           name: cuda-repo
           destinationDir: .
-    git:
-      uri: 'https://github.com/jggc/gpu-driver-container.git'
-    contextDir: /rhel10/precompiled
   triggers:
     - type: ConfigChange
   runPolicy: Serial
