@@ -136,6 +136,7 @@ spec:
           kernel-headers-${KERNEL_VERSION_NOARCH} \
           kernel-devel-${KERNEL_VERSION_NOARCH}  \
           kernel-devel-matched-${KERNEL_VERSION_NOARCH}  \
+        # && sleep 600 \
         # Install build toolchain
         && dnf install -y --setopt=install_weak_deps=false \
           gcc-${GCC_VERSION} \
@@ -148,6 +149,7 @@ spec:
           xz \
           elfutils-libelf-devel \
           kmod \
+          kernel-${KERNEL_VERSION_NOARCH} \
           kernel-headers-${KERNEL_VERSION_NOARCH} \
           kernel-devel-${KERNEL_VERSION_NOARCH}  \
           kernel-devel-matched-${KERNEL_VERSION_NOARCH}  \
@@ -173,6 +175,7 @@ spec:
   strategy:
     type: Docker
     dockerStrategy:
+      forcePull: true
       buildArgs:
         - name: DRIVER_TOOLKIT_IMAGE
           value: 'image-registry.openshift-image-registry.svc:5000/gpu-operator-dev/driver-toolkit-centos10:latest'
@@ -315,6 +318,10 @@ spec:
       - configMap:
           name: cuda-repo
           destinationDir: .
+    git:
+      uri: 'https://github.com/dakine1111/okd-nvidia-driver.git'
+      ref: okd-4.22
+    contextDir: /rhel10/precompiled
   triggers:
     - type: ConfigChange
   runPolicy: Serial
