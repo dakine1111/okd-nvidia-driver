@@ -105,9 +105,9 @@ spec:
         name: 'quay.io/centos/centos:stream10'
       buildArgs:
         - name: "KERNEL_VERSION_NOARCH" # Get it with `uname -r | sed "s/\.$(uname -p)//"`
-          value: "6.12.0-219.el10"
+          value: "6.12.0-281.el10"
         - name: "GCC_VERSION" # Extract from `cat /proc/version` and verify with dnf list gcc --showduplicates to get the exact right value
-          value: "14.3.1-4.4.el10"
+          value: "14.4.1-4.el10"
   source:
     type: Dockerfile
     dockerfile: |
@@ -168,7 +168,7 @@ spec:
   output:
     to:
       kind: ImageStreamTag
-      name: 'driver:580-6.12.0-219.el10.x86_64-centos10'
+      name: 'driver:580-6.12.0-281.el10.x86_64-centos10'
   resources: {}
   successfulBuildsHistoryLimit: 2
   failedBuildsHistoryLimit: 2
@@ -182,11 +182,11 @@ spec:
         - name: "CUDA_DIST"
           value: "centos10"
         - name: "KERNEL_VERSION"
-          value: "6.12.0-219.el10.x86_64"
+          value: "6.12.0-281.el10.x86_64"
         - name: "KERNEL_VERSION_NOARCH"
-          value: "6.12.0-219.el10"
+          value: "6.12.0-281.el10"
         - name: "GCC_VERSION" # Extract from `cat /proc/version` and verify with dnf list gcc --showduplicates to get the exact right value
-          value: "14.3.1-4.4.el10"
+          value: "14.4.1-4.el10"
         - name: "RHEL_VERSION_MAJOR"
           value: '10'
         - name: "BUILD_ARCH"
@@ -291,7 +291,7 @@ spec:
       # [root@nvidia-driver-daemonset-6 extra]# ls
       # drivers  nvidia-drm.ko.xz  nvidia-modeset.ko.xz  nvidia-peermem.ko.xz  nvidia-uvm.ko.xz  nvidia.ko.xz
       # [root@nvidia-driver-daemonset-6 extra]# pwd
-      # /usr/lib/modules/6.12.0-219.el10.x86_64/extra
+      # /usr/lib/modules/6.12.0-281.el10.x86_64/extra
       COPY --from=builder /lib/modules/${KERNEL_VERSION}/extra/ /lib/modules/${KERNEL_VERSION}/extra/
       RUN depmod ${KERNEL_VERSION}
 
