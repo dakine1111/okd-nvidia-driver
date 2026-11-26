@@ -196,7 +196,7 @@ spec:
         - name: "NVARCH"
           value: "x86_64"
         - name: "DRIVER_VERSION"
-          value: "580.105.08"
+          value: "595.91.07"
         - name: "DRIVER_EPOCH"
           value: '1'
         - name: "BUILDER_USER"
@@ -204,7 +204,7 @@ spec:
         - name: "BUILDER_EMAIL"
           value: "github@degert-it.de"
         - name: "CUDA_VERSION"
-          value: "13.0.2"
+          value: "13.5.0"
   postCommit: {}
   source:
     type: Git
