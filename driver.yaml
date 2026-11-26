@@ -93,7 +93,7 @@ spec:
   output:
     to:
       kind: ImageStreamTag
-      name: 'driver-toolkit-centos10:latest'
+      name: 'driver-toolkit-centos10:6.12.0-281.el10'
   resources: {}
   successfulBuildsHistoryLimit: 2
   failedBuildsHistoryLimit: 2
@@ -178,7 +178,7 @@ spec:
       forcePull: true
       buildArgs:
         - name: "DRIVER_TOOLKIT_IMAGE"
-          value: 'image-registry.openshift-image-registry.svc:5000/gpu-operator-dev/driver-toolkit-centos10:latest'
+          value: 'image-registry.openshift-image-registry.svc:5000/gpu-operator-dev/driver-toolkit-centos10:6.12.0-281.el10'
         - name: "CUDA_DIST"
           value: "centos10"
         - name: "KERNEL_VERSION"
