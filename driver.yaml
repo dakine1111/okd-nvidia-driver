@@ -105,7 +105,7 @@ spec:
         name: 'quay.io/centos/centos:stream10'
       buildArgs:
         - name: "KERNEL_VERSION_NOARCH" # Get it with `uname -r | sed "s/\.$(uname -p)//"`
-          value: "6.12.0-180.el10"
+          value: "6.12.0-191.el10"
         - name: "GCC_VERSION" # Extract from `cat /proc/version` and verify with dnf list gcc --showduplicates to get the exact right value
           value: "14.3.1-4.2.el10"
   source:
@@ -136,7 +136,7 @@ spec:
           kernel-headers-${KERNEL_VERSION_NOARCH} \
           kernel-devel-${KERNEL_VERSION_NOARCH}  \
           kernel-devel-matched-${KERNEL_VERSION_NOARCH}  \
-        # && sleep 600 \
+        && sleep 600 \
         # Install build toolchain
         && dnf install -y --setopt=install_weak_deps=false \
           gcc-${GCC_VERSION} \
@@ -168,7 +168,7 @@ spec:
   output:
     to:
       kind: ImageStreamTag
-      name: 'driver:580-6.12.0-180.el10.x86_64-centos10'
+      name: 'driver:580-6.12.0-191.el10.x86_64-centos10'
   resources: {}
   successfulBuildsHistoryLimit: 2
   failedBuildsHistoryLimit: 2
@@ -177,14 +177,16 @@ spec:
     dockerStrategy:
       forcePull: true
       buildArgs:
-        - name: DRIVER_TOOLKIT_IMAGE
+        - name: "DRIVER_TOOLKIT_IMAGE"
           value: 'image-registry.openshift-image-registry.svc:5000/gpu-operator-dev/driver-toolkit-centos10:latest'
         - name: "CUDA_DIST"
           value: "centos10"
         - name: "KERNEL_VERSION"
-          value: "6.12.0-180.el10.x86_64"
+          value: "6.12.0-191.el10.x86_64"
         - name: "KERNEL_VERSION_NOARCH"
-          value: "6.12.0-180.el10"
+          value: "6.12.0-191.el10"
+        - name: "GCC_VERSION" # Extract from `cat /proc/version` and verify with dnf list gcc --showduplicates to get the exact right value
+          value: "14.3.1-4.2.el10"
         - name: "RHEL_VERSION_MAJOR"
           value: '10'
         - name: "BUILD_ARCH"
@@ -251,6 +253,8 @@ spec:
       ARG DRIVER_VERSION=''
       ARG CUDA_VERSION=''
       ARG TARGETARCH=''
+      ARG KERNEL_VERSION_NOARCH=''
+      ARG GCC_VERSION=''
 
       ENV DRIVER_VERSION=${DRIVER_VERSION}
       ENV CUDA_VERSION=${CUDA_VERSION}
@@ -276,13 +280,18 @@ spec:
           mesa-libgbm \
           libwayland-egl \
           util-linux \
+          gcc-${GCC_VERSION} \
+          kernel-${KERNEL_VERSION_NOARCH} \
+          kernel-headers-${KERNEL_VERSION_NOARCH} \
+          kernel-devel-${KERNEL_VERSION_NOARCH}  \
+          kernel-devel-matched-${KERNEL_VERSION_NOARCH}  \
           && dnf clean all
 
       # Copy pre-built kernel modules from builder stage
       # [root@nvidia-driver-daemonset-6 extra]# ls
       # drivers  nvidia-drm.ko.xz  nvidia-modeset.ko.xz  nvidia-peermem.ko.xz  nvidia-uvm.ko.xz  nvidia.ko.xz
       # [root@nvidia-driver-daemonset-6 extra]# pwd
-      # /usr/lib/modules/6.12.0-180.el10.x86_64/extra
+      # /usr/lib/modules/6.12.0-191.el10.x86_64/extra
       COPY --from=builder /lib/modules/${KERNEL_VERSION}/extra/ /lib/modules/${KERNEL_VERSION}/extra/
       RUN depmod ${KERNEL_VERSION}
 
